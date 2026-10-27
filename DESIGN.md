@@ -289,7 +289,7 @@ has none of those, so the screen must not imply they exist.
 Full frame data lives in `design/pet_frames.json` (archetypes,
 faces, animation states, particle specs). This section is the
 contract for how those frames are used. Priority order, always:
-**night (sleeping) > overdue/thirsty > weather > battery**.
+**night (sleeping) > overdue/thirsty > due-soon/restless > weather > battery**.
 A sleeping pet sleeps even if it is sunny; a thirsty pet looks
 thirsty even on a full battery. Battery unknown = neutral energy,
 never a faked level.

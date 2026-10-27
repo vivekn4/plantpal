@@ -38,7 +38,7 @@ home screen, rendered from the release build.
 The pet is not decoration — every animation means something real,
 and when two things compete, this is the order that wins:
 
-**night (sleeping) > overdue/thirsty > weather > battery**
+**night (sleeping) > overdue/thirsty > due-soon/restless > weather > battery**
 
 | What is happening | What the pet does |
 | --- | --- |
