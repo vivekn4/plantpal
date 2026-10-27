@@ -1,0 +1,22 @@
+name: CI
+
+# Every push runs the merge gates: analyze clean, tests green,
+# web build succeeds. APK building lives in build-apk.yml (tags +
+# weekly) so a broken Gradle setup is found early, not on release day.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test --exclude-tags golden
+      - run: flutter build web --release
