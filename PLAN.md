@@ -334,7 +334,7 @@ at). "Fixed, trust me" is not a fix.
   ("due tomorrow", "2 days overdue", "happy"), and a one-tap water
   button on overdue pets. Empty state: one big "Adopt your first
   plant" button and a sample pet drawn in code (never a fake photo).
-- **Adopt flow (3 steps, no more):** photo → name + species →
+- **Adopt flow (3 setup steps + pet reveal):** photo → name + species →
   watered? + soil? → pet reveal with celebration. Each step fits on
   one phone screen without scrolling where possible. Back is always
   available; nothing is lost going back a step.
