@@ -70,16 +70,40 @@ class _PixelPetState extends State<PixelPet>
         : widget.mood == PetMood.thirsty
             ? const Color(0xFFE8DCC3)
             : PlantColors.cream;
-    return Container(
-      width: widget.size,
-      height: widget.size,
-      decoration: BoxDecoration(
-        color: scene,
-        border: Border.all(color: PlantColors.soilDark, width: 3),
-      ),
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) {
+    // RepaintBoundary: the 2.4s animation repaints this pet only,
+    // not its siblings on the home grid.
+    return RepaintBoundary(
+      child: Container(
+        width: widget.size,
+        height: widget.size,
+        decoration: BoxDecoration(
+          color: scene,
+          border: Border.all(color: PlantColors.soilDark, width: 3),
+        ),
+        child: AnimatedBuilder(
+          animation: _controller,
+          // The pet image / code-drawn pet never changes with the
+          // animation tick, so pass it as the static child instead
+          // of rebuilding Image.memory on every frame.
+          child: SizedBox(
+            width: widget.size * 0.78,
+            height: widget.size * 0.78,
+            child: Stack(
+              children: [
+                if (widget.avatarBytes != null)
+                  Positioned.fill(
+                    child: Image.memory(
+                      widget.avatarBytes!,
+                      filterQuality: FilterQuality.none,
+                      fit: BoxFit.contain,
+                    ),
+                  )
+                else
+                  const Positioned.fill(child: _CodePet()),
+              ],
+            ),
+          ),
+          builder: (context, child) {
           final t = _controller.value;
           // Reduced motion honours MediaQuery.disableAnimations: no
           // flutter, tremble, or big bounce — just a slow, small bob
@@ -107,34 +131,24 @@ class _PixelPetState extends State<PixelPet>
                     angle: sway,
                     child: Transform.scale(
                       scaleY: squash,
-                      child: SizedBox(
-                        width: widget.size * 0.78,
-                        height: widget.size * 0.78,
-                        child: Stack(
-                          children: [
-                            if (widget.avatarBytes != null)
-                              Positioned.fill(
-                                child: Image.memory(
-                                  widget.avatarBytes!,
-                                  filterQuality: FilterQuality.none,
-                                  fit: BoxFit.contain,
-                                ),
-                              )
-                            else
-                              const Positioned.fill(child: _CodePet()),
-                            Positioned.fill(
-                              child: CustomPaint(
-                                // Faces and particles freeze under
-                                // reduced motion; only the gentle bob
-                                // above keeps moving.
-                                painter: _FacePainter(
-                                  widget.mood,
-                                  reduced ? 0.5 : t,
-                                ),
+                      child: Stack(
+                        children: [
+                          // Static pet image from the AnimatedBuilder
+                          // child; the face painter on top is the
+                          // only part that moves with the tick.
+                          child ?? const SizedBox.shrink(),
+                          Positioned.fill(
+                            child: CustomPaint(
+                              // Faces and particles freeze under
+                              // reduced motion; only the gentle bob
+                              // above keeps moving.
+                              painter: _FacePainter(
+                                widget.mood,
+                                reduced ? 0.5 : t,
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -152,6 +166,7 @@ class _PixelPetState extends State<PixelPet>
             ],
           );
         },
+        ),
       ),
     );
   }
@@ -169,27 +184,32 @@ class _CodePet extends StatelessWidget {
 }
 
 class _CodePetPainter extends CustomPainter {
+  // Paints are constant for this pet; creating them on every paint
+  // call (every animation frame, for every pet on the shelf) was
+  // pure allocation churn.
+  final _leafPaint = Paint()..color = PlantColors.leaf;
+  final _brightPaint = Paint()..color = PlantColors.leafBright;
+  final _potPaint = Paint()..color = PlantColors.pot;
+  final _soilPaint = Paint()..color = PlantColors.soil;
+
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
-    final leafPaint = Paint()..color = PlantColors.leaf;
-    final brightPaint = Paint()..color = PlantColors.leafBright;
-    final potPaint = Paint()..color = PlantColors.pot;
-    final soilPaint = Paint()..color = PlantColors.soil;
+    final h = size.height;
 
     // Leaves: five chunky ellipses fanning out of the pot.
     for (var i = 0; i < 5; i++) {
       final angle = -0.9 + i * 0.45;
-      final paint = i.isEven ? leafPaint : brightPaint;
+      final paint = i.isEven ? _leafPaint : _brightPaint;
       canvas.save();
-      canvas.translate(w * 0.5, h(size) * 0.62);
+      canvas.translate(w * 0.5, h * 0.62);
       canvas.rotate(angle);
       canvas.drawRRect(
         RRect.fromRectAndRadius(
           Rect.fromCenter(
-            center: Offset(0, -h(size) * 0.22),
+            center: Offset(0, -h * 0.22),
             width: w * 0.16,
-            height: h(size) * 0.48,
+            height: h * 0.48,
           ),
           const Radius.circular(2),
         ),
@@ -199,23 +219,21 @@ class _CodePetPainter extends CustomPainter {
     }
     // Soil and pot.
     canvas.drawRect(
-      Rect.fromLTWH(w * 0.22, h(size) * 0.58, w * 0.56, h(size) * 0.06),
-      soilPaint,
+      Rect.fromLTWH(w * 0.22, h * 0.58, w * 0.56, h * 0.06),
+      _soilPaint,
     );
     final pot = Path()
-      ..moveTo(w * 0.2, h(size) * 0.64)
-      ..lineTo(w * 0.8, h(size) * 0.64)
-      ..lineTo(w * 0.72, h(size) * 0.95)
-      ..lineTo(w * 0.28, h(size) * 0.95)
+      ..moveTo(w * 0.2, h * 0.64)
+      ..lineTo(w * 0.8, h * 0.64)
+      ..lineTo(w * 0.72, h * 0.95)
+      ..lineTo(w * 0.28, h * 0.95)
       ..close();
-    canvas.drawPath(pot, potPaint);
+    canvas.drawPath(pot, _potPaint);
     canvas.drawRect(
-      Rect.fromLTWH(w * 0.18, h(size) * 0.60, w * 0.64, h(size) * 0.06),
-      potPaint,
+      Rect.fromLTWH(w * 0.18, h * 0.60, w * 0.64, h * 0.06),
+      _potPaint,
     );
   }
-
-  double h(Size size) => size.height;
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
@@ -354,6 +372,20 @@ class _ParticlePainter extends CustomPainter {
   final double t;
   final bool celebrating;
 
+  // The sleeping "Z"s are identical every frame — the old code built
+  // and laid out three new TextPainters on every animation tick.
+  // Lay them out once and reuse them; only the paint offset moves.
+  static final List<TextPainter> _zPainters = [
+    for (var i = 0; i < 3; i++)
+      TextPainter(
+        text: TextSpan(
+          text: 'Z',
+          style: pixelStyle(size: 10 + i * 4, color: Colors.white),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout(),
+  ];
+
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
@@ -414,14 +446,7 @@ class _ParticlePainter extends CustomPainter {
       case PetMood.sleeping:
         for (var i = 0; i < 3; i++) {
           final rise = (t + i * 0.33) % 1.0;
-          final textPainter = TextPainter(
-            text: TextSpan(
-              text: 'Z',
-              style: pixelStyle(size: 10 + i * 4, color: Colors.white),
-            ),
-            textDirection: TextDirection.ltr,
-          )..layout();
-          textPainter.paint(
+          _zPainters[i].paint(
             canvas,
             Offset(w * (0.62 + i * 0.08), h * (0.3 - rise * 0.22)),
           );

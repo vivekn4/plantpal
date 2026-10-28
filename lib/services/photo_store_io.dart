@@ -10,11 +10,18 @@ class PhotoStorage {
 
   final SharedPreferences _prefs;
 
+  /// The documents directory never moves during a run, but the old
+  /// code asked the platform for it (plus an exists check) on every
+  /// photo and avatar read/write. Resolve once, reuse after that.
+  Directory? _cachedDir;
+
   Future<Directory> _dir() async {
+    final cached = _cachedDir;
+    if (cached != null) return cached;
     final docs = await getApplicationDocumentsDirectory();
     final dir = Directory('${docs.path}/plantpal');
     if (!await dir.exists()) await dir.create(recursive: true);
-    return dir;
+    return _cachedDir = dir;
   }
 
   Future<void> savePhoto(String plantId, Uint8List bytes) async {

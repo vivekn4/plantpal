@@ -62,9 +62,11 @@ There is no server clock and no sync.
 
 - Each species has a starting interval — pothos, snake plant, spider
   plant, monstera, peace lily, succulent/cactus, fern, fiddle-leaf
-  fig, philodendron, ZZ plant, plus "Other / I don't know" at a
-  cautious 7 days. Intervals are starting points, not gospel: every
-  plant screen shows the interval and lets you change it.
+  fig, philodendron, ZZ plant, aloe vera, jade plant, calathea,
+  rubber plant, dracaena, bird of paradise, English ivy, plus
+  "Other / I don't know" at a cautious 7 days. Intervals are
+  starting points, not gospel: every plant screen shows the
+  interval and lets you change it.
 - How the soil feels at setup shifts the first due date:
   dry brings it 2 days sooner (never less than 1 day away),
   moist keeps the default interval, wet pushes it 2 days later.
@@ -79,6 +81,43 @@ There is no server clock and no sync.
   and shown in your local time, so travel does not break them.
 - Got more than one plant? Each has its own pet, its own clock, and
   its own reminder. The home screen is a shelf of pets.
+
+## More than watering
+
+Other plant apps keep every rhythm separate instead of folding
+everything into one interval, and PlantPal now does the same:
+
+- **Other care tasks.** On a plant screen, add fertilize, mist,
+  rotate, prune, or repot, each with its own interval and its own
+  due date in plain words. Tap Done and its clock resets. On
+  Android each task gets its own reminder, on its own
+  notification id, so it never overwrites the watering reminder.
+  Watering is still the main clock — the pet's mood still follows
+  watering first, then weather, then battery.
+- **Streak.** The plant screen shows how many waterings in a row
+  were on time. A plant that is overdue right now has a streak
+  of 0: the streak broke when it went overdue, and the next
+  on-time watering starts a new one. No score, no points, just
+  the count, derived from the watering history already on the
+  device.
+- **Notes.** One free-text note per plant — soil mix, pot
+  changes, which window it likes. It lives with the plant and
+  is deleted with it.
+- **Search, sort, and coming up.** The home shelf can be
+  searched by name and sorted by due date, name, or newest.
+  Below the weather badge, "Coming up this week" lists the
+  plants due in the next 7 days (overdue pets already shout
+  from the shelf itself, so they are not repeated there).
+- **Learning, on-device.** After 4 waterings, the plant screen
+  shows what PlantPal has learned from your own watering
+  history: the median gap between real waterings, not the mean,
+  so one late watering on holiday does not drag the suggestion
+  around. If that rhythm differs from your schedule by at least
+  2 days, it offers a new interval — and nothing changes unless
+  you tap it. No photo identification, no disease diagnosis, no
+  model, no cloud: that kind of "AI" would need a dataset
+  PlantPal does not have, and a wrong guess would be worse than
+  no guess.
 
 ## Weather and location
 
@@ -102,9 +141,20 @@ fallback is your local weather.
   is the Open-Meteo weather fetch.
 - Deleting a plant deletes its photo and avatar too. Nothing is left
   behind.
-- One honest trade-off: with no cloud backup, reinstalling without a
-  backup of your own loses your pets. That is the price of keeping
-  everything local, and it is stated here rather than buried.
+- **Backup, without a cloud.** Settings has Export backup and
+  Import backup. Export copies your plants, care tasks, notes,
+  settings, and pixel pets as plain text you keep yourself — a
+  note, an email to yourself, a file. Import first checks the
+  text, shows you how many plants it holds and their names, and
+  only then replaces your current plants, and only if the backup
+  fully validated. A bad paste changes nothing.
+- One honest trade-off, still: a backup does NOT hold your
+  original photos (a photo per plant would turn a backup into
+  megabytes of text no one can paste reliably). After a restore
+  your pixel pets look the same, but the original photo on each
+  plant screen is gone. There is still no cloud copy — that is
+  the price of keeping everything local, and it is stated here
+  rather than buried.
 
 ## Sound, motion, and the off switch
 

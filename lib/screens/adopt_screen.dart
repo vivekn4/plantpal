@@ -44,14 +44,22 @@ class _AdoptScreenState extends State<AdoptScreen> {
 
   Future<void> _pick(ImageSource source) async {
     try {
-      final picked = await ImagePicker().pickImage(source: source);
+      // Cap the picked photo at 1200px on its long side: the stored
+      // photo is capped at 900px and the avatar at 48px, so anything
+      // larger only costs decode time and memory, never quality the
+      // app can show. One decode then produces avatar + stored photo.
+      final picked = await ImagePicker().pickImage(
+        source: source,
+        maxWidth: 1200,
+        maxHeight: 1200,
+      );
       if (picked == null) return;
       final bytes = await picked.readAsBytes();
-      final avatar = pixelatePhoto(bytes);
+      final processed = processPhotoForAdopt(bytes);
       setState(() {
-        _photoBytes = downscalePhoto(bytes) ?? bytes;
-        _avatarBytes = avatar;
-        _photoError = avatar == null
+        _photoBytes = processed.photo;
+        _avatarBytes = processed.avatar;
+        _photoError = processed.avatar == null
             ? 'That photo could not be read. Try another one.'
             : null;
       });

@@ -10,8 +10,19 @@ void main() {
 
 /// Loads on-device state, then hands the app over. The pet renders
 /// before weather or battery arrive — those refresh in the background.
-class PlantPalLoader extends StatelessWidget {
+///
+/// Stateful so the load future is created once: a stateless loader
+/// calling AppState.create() in build would restart the whole load
+/// (prefs, notifications, weather) on any rebuild above it.
+class PlantPalLoader extends StatefulWidget {
   const PlantPalLoader({super.key});
+
+  @override
+  State<PlantPalLoader> createState() => _PlantPalLoaderState();
+}
+
+class _PlantPalLoaderState extends State<PlantPalLoader> {
+  late final Future<AppState> _stateFuture = AppState.create();
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +30,7 @@ class PlantPalLoader extends StatelessWidget {
       title: 'PlantPal',
       theme: plantTheme(),
       home: FutureBuilder<AppState>(
-        future: AppState.create(),
+        future: _stateFuture,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const Scaffold(

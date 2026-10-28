@@ -48,6 +48,37 @@ WateringStatus statusAt(Plant plant, DateTime nowUtc) {
   return WateringStatus.happy;
 }
 
+/// Watering streak: how many waterings in a row were on time, ending
+/// with the most recent watering. Other apps show streaks and
+/// achievements; PlantPal's version is just this number, derived
+/// from history, never a made-up score.
+///
+/// Rules, kept plain: a plant that is overdue right now has a
+/// streak of 0 (the streak broke when it went overdue). Otherwise,
+/// walk the history backwards: a watering counts when it happened
+/// on or before its cycle's due date (the previous watering +
+/// interval, or the setup first due date for the first watering).
+/// The first late watering stops the count. The current interval
+/// is used for every cycle — an approximation when the interval
+/// was edited mid-history, stated here so it is not hidden.
+int wateringStreak(Plant plant, DateTime nowUtc) {
+  if (statusAt(plant, nowUtc) == WateringStatus.overdue) return 0;
+  final history = [...plant.wateredHistoryUtc]..sort();
+  if (history.isEmpty) return 0;
+  var streak = 0;
+  for (var i = history.length - 1; i >= 0; i--) {
+    final watering = history[i];
+    final due = i == 0
+        ? (plant.firstDueUtc ?? plant.createdUtc.add(
+              Duration(days: plant.intervalDays),
+            ))
+        : history[i - 1].add(Duration(days: plant.intervalDays));
+    if (watering.isAfter(due)) break;
+    streak++;
+  }
+  return streak;
+}
+
 /// Whole days past the due date. Zero when overdue by less than a day.
 int daysOverdue(Plant plant, DateTime nowUtc) {
   final diff = nowUtc.difference(nextDue(plant));

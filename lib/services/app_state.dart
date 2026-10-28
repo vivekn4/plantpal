@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/care_task.dart';
 import '../models/plant.dart';
 import '../models/weather.dart';
+import 'backup.dart';
 import 'battery_service.dart';
 import 'notification_service.dart';
 import 'photo_store.dart';
@@ -38,20 +40,25 @@ class AppState extends ChangeNotifier {
     NotificationService? notifications,
     bool refresh = true,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
+    // Prefs load and notification init are independent platform
+    // calls; run them together instead of one after the other.
+    final notificationsService = notifications ?? NotificationService();
+    final prefsFuture = SharedPreferences.getInstance();
+    final notificationsFuture = notificationsService.init();
+    final prefs = await prefsFuture;
     final store = PlantStore(prefs);
     final state = AppState._(
       store: store,
       photos: PhotoStorage(prefs),
       sfx: SfxService(),
-      notifications: notifications ?? NotificationService(),
+      notifications: notificationsService,
       weatherService: weatherService ?? WeatherService(store: store),
       batteryService: batteryService ?? BatteryService(),
       initialPlants: store.loadPlants(),
       initialSettings: store.loadSettings(),
     );
     state._sfx.enabled = state._settings.soundOn;
-    await state._notifications.init();
+    await notificationsFuture;
     if (refresh) unawaited(state.refreshEnvironment());
     return state;
   }
@@ -68,12 +75,20 @@ class AppState extends ChangeNotifier {
   WeatherSnapshot? _weather;
   int? _batteryLevel;
 
+  /// Cached shelf order, rebuilt only when the plant list changes.
+  /// The old getter copied and re-sorted on every access — and the
+  /// home and plant screens access it on every rebuild, even when
+  /// only the weather or battery changed.
+  List<Plant>? _sortedCache;
+
+  void _invalidatePlants() => _sortedCache = null;
+
   /// Shelf order: most urgent first (overdue, then due soon, then
   /// happy), by next due date.
   List<Plant> get plants {
-    final sorted = [..._plants]
-      ..sort((a, b) => nextDue(a).compareTo(nextDue(b)));
-    return List.unmodifiable(sorted);
+    return _sortedCache ??= List.unmodifiable(
+      [..._plants]..sort((a, b) => nextDue(a).compareTo(nextDue(b))),
+    );
   }
 
   /// True when the stored plant document failed to parse at load.
@@ -114,12 +129,15 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> refreshEnvironment() async {
-    final weather = await _weatherService.fetch(
-      useLocation: _settings.useLocation,
-    );
-    final battery = await _batteryService.level();
-    _weather = weather;
-    _batteryLevel = battery;
+    // Weather (network, up to a 10s timeout) and battery (platform
+    // channel) are independent — waiting for one before starting
+    // the other made every refresh as slow as their sum.
+    final results = await Future.wait([
+      _weatherService.fetch(useLocation: _settings.useLocation),
+      _batteryService.level(),
+    ]);
+    _weather = results[0] as WeatherSnapshot?;
+    _batteryLevel = results[1] as int?;
     notifyListeners();
   }
 
@@ -128,6 +146,7 @@ class AppState extends ChangeNotifier {
     final ok = await _store.savePlants(next);
     if (!ok) return false;
     _plants = next;
+    _invalidatePlants();
     await _schedule(plant);
     notifyListeners();
     return true;
@@ -138,6 +157,7 @@ class AppState extends ChangeNotifier {
     final ok = await _store.savePlants(next);
     if (!ok) return false;
     _plants = next;
+    _invalidatePlants();
     await _schedule(plant);
     notifyListeners();
     return true;
@@ -156,14 +176,72 @@ class AppState extends ChangeNotifier {
   }
 
   Future<bool> deletePlant(String id) async {
+    final plant = _plants.where((p) => p.id == id).firstOrNull;
     final next = _plants.where((p) => p.id != id).toList();
     final ok = await _store.savePlants(next);
     if (!ok) return false;
     _plants = next;
+    _invalidatePlants();
     await _photos.deleteAll(id);
     await _notifications.cancel(notificationIdFor(id));
+    if (plant != null) {
+      for (final task in plant.careTasks) {
+        await _notifications.cancel(
+          notificationIdForTask(id, task.kind.name),
+        );
+      }
+    }
     notifyListeners();
     return true;
+  }
+
+  /// Add a care task to a plant. One task per kind: adding a kind
+  /// that is already there returns false and changes nothing.
+  Future<bool> addCareTask(
+    String plantId,
+    CareTask task,
+  ) async {
+    final plant = _plants.where((p) => p.id == plantId).firstOrNull;
+    if (plant == null) return false;
+    if (plant.careTasks.any((t) => t.kind == task.kind)) return false;
+    return updatePlant(
+      plant.copyWith(careTasks: [...plant.careTasks, task]),
+    );
+  }
+
+  /// Mark a care task done: its next due date moves to now +
+  /// interval, and its reminder is rescheduled.
+  Future<bool> completeCareTask(
+    String plantId,
+    CareTaskKind kind,
+    DateTime nowUtc,
+  ) async {
+    final plant = _plants.where((p) => p.id == plantId).firstOrNull;
+    if (plant == null) return false;
+    if (!plant.careTasks.any((t) => t.kind == kind)) return false;
+    final tasks = plant.careTasks
+        .map((t) => t.kind == kind ? t.doneAt(nowUtc) : t)
+        .toList();
+    return updatePlant(plant.copyWith(careTasks: tasks));
+  }
+
+  /// Remove a care task and cancel its reminder.
+  Future<bool> deleteCareTask(
+    String plantId,
+    CareTaskKind kind,
+  ) async {
+    final plant = _plants.where((p) => p.id == plantId).firstOrNull;
+    if (plant == null) return false;
+    final tasks =
+        plant.careTasks.where((t) => t.kind != kind).toList();
+    if (tasks.length == plant.careTasks.length) return false;
+    final ok = await updatePlant(plant.copyWith(careTasks: tasks));
+    if (ok) {
+      await _notifications.cancel(
+        notificationIdForTask(plantId, kind.name),
+      );
+    }
+    return ok;
   }
 
   Future<bool> updateSettings(Settings settings) async {
@@ -176,10 +254,79 @@ class AppState extends ChangeNotifier {
     return true;
   }
 
+  /// Export the current shelf as backup text. Avatars are read
+  /// here, not in the UI, so the Settings screen never touches
+  /// photo storage directly.
+  Future<String> exportBackup() async {
+    final avatars = <String, Uint8List?>{};
+    for (final plant in _plants) {
+      avatars[plant.id] = await _photos.readAvatar(plant.id);
+    }
+    return buildBackupJson(
+      plants: _plants,
+      avatars: avatars,
+      settings: _settings,
+      exportedAtUtc: DateTime.now().toUtc(),
+    );
+  }
+
+  /// Import a backup, replacing the current shelf. Returns the
+  /// imported plant count, or null when the text did not validate
+  /// — in which case nothing at all is changed, not even settings.
+  ///
+  /// Order matters for safety: validate first, save the new
+  /// plants second, and only then clean up the old plants' photos
+  /// and reminders. A failed plant save leaves the old shelf,
+  /// photos, and reminders exactly as they were.
+  Future<int?> importBackup(String text) async {
+    final data = parseBackup(text);
+    if (data == null) return null;
+    final oldPlants = _plants;
+    final ok = await _store.savePlants(data.plants);
+    if (!ok) return null;
+    _plants = data.plants;
+    _invalidatePlants();
+    // Old plants that are gone: delete their photos and reminders.
+    for (final old in oldPlants) {
+      if (data.plants.any((p) => p.id == old.id)) continue;
+      await _photos.deleteAll(old.id);
+      await _notifications.cancel(notificationIdFor(old.id));
+      for (final task in old.careTasks) {
+        await _notifications.cancel(
+          notificationIdForTask(old.id, task.kind.name),
+        );
+      }
+    }
+    // Plants that survived the replace, but whose original photo
+    // was never in the backup: drop that photo too, so hasPhoto
+    // (already false in the parsed plants) matches what is on disk.
+    for (final plant in data.plants) {
+      final wasThere = oldPlants.any((p) => p.id == plant.id);
+      if (!wasThere) continue;
+      await _photos.deleteAll(plant.id);
+    }
+    // Avatars from the backup, saved after the cleanup above.
+    for (final entry in data.avatars.entries) {
+      await _photos.saveAvatar(entry.key, entry.value);
+    }
+    // Settings from the backup, then reminders for the new shelf.
+    final settingsOk = await _store.saveSettings(data.settings);
+    if (settingsOk) {
+      _settings = data.settings;
+      _sfx.enabled = data.settings.soundOn;
+    }
+    for (final plant in data.plants) {
+      await _schedule(plant);
+    }
+    notifyListeners();
+    return data.plants.length;
+  }
+
   /// Replace the plant list (used by previews/tests that already own
   /// their plants). Not part of the normal user flow.
   void replaceForTest(List<Plant> plants) {
     _plants = plants;
+    _invalidatePlants();
     notifyListeners();
   }
 
@@ -189,6 +336,17 @@ class AppState extends ChangeNotifier {
       plantName: plant.name,
       dueUtc: nextDue(plant),
     );
+    // Care tasks get their own reminders, on their own ids, so a
+    // task reminder never overwrites the watering reminder.
+    for (final task in plant.careTasks) {
+      await _notifications.scheduleWatering(
+        id: notificationIdForTask(plant.id, task.kind.name),
+        plantName: plant.name,
+        dueUtc: task.nextDueUtc,
+        title: 'Time to ${task.kind.label.toLowerCase()} ${plant.name}',
+        body: '${plant.name} is due for ${task.kind.label.toLowerCase()}.',
+      );
+    }
   }
 
   /// For golden previews: a state that skips platform init entirely.

@@ -3,8 +3,11 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../models/care_task.dart';
 import '../models/weather.dart';
 import '../services/app_state.dart';
+import '../services/care_tasks.dart';
+import '../services/learning.dart';
 import '../services/pet_state_resolver.dart';
 import '../services/watering.dart';
 import '../theme/app_theme.dart';
@@ -30,6 +33,8 @@ class _PlantScreenState extends State<PlantScreen> {
   int? _editedInterval;
   Uint8List? _photoBytes;
   Timer? _celebrateTimer;
+  CareTaskKind? _newTaskKind;
+  int _newTaskInterval = 30;
 
   @override
   void initState() {
@@ -98,6 +103,49 @@ class _PlantScreenState extends State<PlantScreen> {
     }
   }
 
+  Future<void> _editNote(String currentNote) async {
+    final controller = TextEditingController(text: currentNote);
+    final saved = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Note'),
+        content: TextField(
+          controller: controller,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            hintText: 'Repotted in May. Likes the east window.',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.of(context).pop(controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (saved == null || !mounted) return;
+    final plant = widget.state.plants
+        .where((p) => p.id == widget.plantId)
+        .firstOrNull;
+    if (plant == null) return;
+    final ok = await widget.state.updatePlant(
+      plant.copyWith(note: saved),
+    );
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('That did not save. Try again.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -124,6 +172,17 @@ class _PlantScreenState extends State<PlantScreen> {
         final interval = _editedInterval ?? plant.intervalDays;
         final newDue = recomputedDue(plant, interval);
         final intervalChanged = interval != plant.intervalDays;
+        // Care-task add row: until the user picks a kind, the
+        // interval shown is that kind's default, not a stale 30.
+        final availableKinds = CareTaskKind.values
+            .where((kind) => !plant.careTasks.any((t) => t.kind == kind))
+            .toList();
+        final addKind = availableKinds.isEmpty
+            ? null
+            : (_newTaskKind ?? availableKinds.first);
+        final addInterval = _newTaskKind == null && addKind != null
+            ? addKind.defaultIntervalDays
+            : _newTaskInterval;
         return Scaffold(
           appBar: AppBar(
             title: Text(
@@ -166,6 +225,15 @@ class _PlantScreenState extends State<PlantScreen> {
                     "First reminder estimated — tap 'I watered it' to "
                     'start the real clock.',
                     style: TextStyle(fontSize: 12),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+                if (wateringStreak(plant, now) > 0) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Streak: ${wateringStreak(plant, now)} '
+                    'waterings on time in a row',
+                    style: const TextStyle(fontSize: 12),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -247,6 +315,195 @@ class _PlantScreenState extends State<PlantScreen> {
                     },
                   ),
                 ],
+                const SizedBox(height: 24),
+                Text('Learned from your watering', style: pixelStyle(size: 11)),
+                const SizedBox(height: 8),
+                Text(
+                  learningText(plant),
+                  style: const TextStyle(fontSize: 12),
+                  textAlign: TextAlign.center,
+                ),
+                if (suggestedInterval(plant) != null) ...[
+                  const SizedBox(height: 8),
+                  PixelButton(
+                    label:
+                        'Use every ${suggestedInterval(plant)} days instead',
+                    color: PlantColors.leaf,
+                    onPressed: () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      final suggestion = suggestedInterval(plant);
+                      if (suggestion == null) return;
+                      final updated = plant.lastWateredUtc == null
+                          ? plant.copyWith(
+                              intervalDays: suggestion,
+                              firstDueUtc:
+                                  recomputedDue(plant, suggestion),
+                            )
+                          : plant.copyWith(intervalDays: suggestion);
+                      final ok =
+                          await widget.state.updatePlant(updated);
+                      if (!mounted) return;
+                      if (ok) {
+                        setState(() => _editedInterval = null);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Schedule updated to every $suggestion days.',
+                            ),
+                          ),
+                        );
+                      } else {
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text('That did not save. Try again.'),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                  const Text(
+                    'On-device only, from your own watering history. '
+                    'Nothing changes unless you tap this.',
+                    style: TextStyle(fontSize: 12),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+                const SizedBox(height: 24),
+                Text('Other care', style: pixelStyle(size: 11)),
+                const SizedBox(height: 8),
+                const Text(
+                  'Watering is still the main clock. These are the '
+                  'other rhythms other plant apps keep separate: '
+                  'fertilize, mist, rotate, prune, repot.',
+                  style: TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                ...sortedCareTasks(plant.careTasks).map(
+                  (task) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${task.kind.label} — '
+                            '${careTaskDueWords(task, now)} '
+                            '(every ${task.intervalDays} days)',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            await widget.state.completeCareTask(
+                              plant.id,
+                              task.kind,
+                              DateTime.now().toUtc(),
+                            );
+                          },
+                          child: const Text('Done'),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          tooltip: 'Remove task',
+                          onPressed: () async {
+                            await widget.state.deleteCareTask(
+                              plant.id,
+                              task.kind,
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (addKind != null) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButton<CareTaskKind>(
+                          value: addKind,
+                          items: availableKinds
+                              .map(
+                                (kind) => DropdownMenuItem(
+                                  value: kind,
+                                  child: Text(kind.label),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() {
+                              _newTaskKind = value;
+                              _newTaskInterval =
+                                  value.defaultIntervalDays;
+                            });
+                          },
+                        ),
+                      ),
+                      IconButton(
+                        // Plain +/- here, on purpose: the watering
+                        // interval stepper above uses the circled
+                        // icons, and the existing interval tests
+                        // find that icon — reusing it here would
+                        // make the two steppers indistinguishable.
+                        icon: const Icon(Icons.remove),
+                        tooltip: 'Fewer days for task',
+                        onPressed: addInterval > 1
+                            ? () => setState(() {
+                                  _newTaskKind = addKind;
+                                  _newTaskInterval = addInterval - 1;
+                                })
+                            : null,
+                      ),
+                      Text('$addInterval days'),
+                      IconButton(
+                        icon: const Icon(Icons.add),
+                        tooltip: 'More days for task',
+                        onPressed: () => setState(() {
+                          _newTaskKind = addKind;
+                          _newTaskInterval = addInterval + 1;
+                        }),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          final ok = await widget.state.addCareTask(
+                            plant.id,
+                            CareTask(
+                              kind: addKind,
+                              intervalDays: addInterval,
+                              nextDueUtc: DateTime.now().toUtc().add(
+                                Duration(days: addInterval),
+                              ),
+                            ),
+                          );
+                          if (ok && mounted) {
+                            setState(() {
+                              _newTaskKind = null;
+                              _newTaskInterval = 30;
+                            });
+                          }
+                        },
+                        child: const Text('Add'),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 24),
+                Text('Note', style: pixelStyle(size: 11)),
+                const SizedBox(height: 8),
+                if (plant.note.isEmpty)
+                  const Text(
+                    'No note yet. Useful for soil mix, pot changes, '
+                    'or which window it likes.',
+                    style: TextStyle(fontSize: 12),
+                  )
+                else
+                  Text(plant.note, style: const TextStyle(fontSize: 13)),
+                const SizedBox(height: 8),
+                PixelButton(
+                  label: plant.note.isEmpty ? 'Add a note' : 'Edit note',
+                  onPressed: () => _editNote(plant.note),
+                ),
                 const SizedBox(height: 24),
                 Text('Watering history', style: pixelStyle(size: 11)),
                 const SizedBox(height: 8),

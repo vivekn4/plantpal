@@ -1,3 +1,5 @@
+import 'care_task.dart';
+
 /// A plant and everything the app needs to care for it.
 /// All dates are stored in UTC and converted to local time for display,
 /// so travel and clock changes cannot shift a due date (PLAN.md bug 2).
@@ -13,7 +15,10 @@ class Plant {
     List<DateTime>? wateredHistoryUtc,
     this.hasPhoto = false,
     this.hasAvatar = false,
-  }) : wateredHistoryUtc = wateredHistoryUtc ?? const [];
+    List<CareTask>? careTasks,
+    this.note = '',
+  })  : wateredHistoryUtc = wateredHistoryUtc ?? const [],
+        careTasks = careTasks ?? const [];
 
   final String id;
   final String name;
@@ -21,6 +26,15 @@ class Plant {
   final int intervalDays;
   final DateTime createdUtc;
   final DateTime? lastWateredUtc;
+
+  /// Other care rhythms (fertilize, mist, …), separate from
+  /// watering. Empty for plants saved before care tasks existed.
+  final List<CareTask> careTasks;
+
+  /// One free-text note per plant ("repotted in May", "likes the
+  /// east window"). Plantoto-style notes, without a photo journal:
+  /// the plant already has its own photo.
+  final String note;
 
   /// First due date when the last-watered date is unknown (setup with
   /// "just watered = no"). Once the plant is watered for real, the
@@ -41,6 +55,8 @@ class Plant {
     List<DateTime>? wateredHistoryUtc,
     bool? hasPhoto,
     bool? hasAvatar,
+    List<CareTask>? careTasks,
+    String? note,
   }) {
     return Plant(
       id: id,
@@ -53,6 +69,8 @@ class Plant {
       wateredHistoryUtc: wateredHistoryUtc ?? this.wateredHistoryUtc,
       hasPhoto: hasPhoto ?? this.hasPhoto,
       hasAvatar: hasAvatar ?? this.hasAvatar,
+      careTasks: careTasks ?? this.careTasks,
+      note: note ?? this.note,
     );
   }
 
@@ -69,6 +87,8 @@ class Plant {
       wateredHistoryUtc: history,
       hasPhoto: hasPhoto,
       hasAvatar: hasAvatar,
+      careTasks: careTasks,
+      note: note,
     );
   }
 
@@ -83,6 +103,8 @@ class Plant {
         'wateredHistoryUtc': wateredHistoryUtc.map((d) => d.toIso8601String()).toList(),
         'hasPhoto': hasPhoto,
         'hasAvatar': hasAvatar,
+        'careTasks': careTasks.map((t) => t.toJson()).toList(),
+        'note': note,
       };
 
   factory Plant.fromJson(Map<String, dynamic> json) {
@@ -111,6 +133,19 @@ class Plant {
           .toList(),
       hasPhoto: json['hasPhoto'] as bool? ?? false,
       hasAvatar: json['hasAvatar'] as bool? ?? false,
+      // Old saves have no careTasks or note: they load as empty,
+      // never as a crash, and never overwrite a newer save.
+      careTasks: ((json['careTasks'] as List<dynamic>?) ?? [])
+          .map((e) {
+            try {
+              return CareTask.fromJson(e as Map<String, dynamic>);
+            } catch (_) {
+              return null;
+            }
+          })
+          .whereType<CareTask>()
+          .toList(),
+      note: json['note'] as String? ?? '',
     );
   }
 }

@@ -7,6 +7,11 @@ import 'package:timezone/timezone.dart' as tz;
 /// so rescheduling replaces rather than duplicates.
 int notificationIdFor(String plantId) => plantId.hashCode & 0x7fffffff;
 
+/// Stable id per plant + care task kind, so a task reminder
+/// replaces its own previous reminder and never the watering one.
+int notificationIdForTask(String plantId, String taskKind) =>
+    '${plantId}_task_$taskKind'.hashCode & 0x7fffffff;
+
 /// Reminder time: 09:00 local on the due date — a friendly hour, not
 /// midnight (ARCHITECTURE.md 6.4). If that hour already passed, the
 /// due instant itself is used when it is still in the future.
@@ -51,6 +56,8 @@ class NotificationService {
     required int id,
     required String plantName,
     required DateTime dueUtc,
+    String? title,
+    String? body,
   }) async {
     if (kIsWeb || !_ready) return;
     final nowUtc = DateTime.now().toUtc();
@@ -70,8 +77,8 @@ class NotificationService {
       // matter what the device time zone is set to.
       await _plugin.zonedSchedule(
         id: id,
-        title: 'Time to water $plantName',
-        body: '$plantName is ready for a drink.',
+        title: title ?? 'Time to water $plantName',
+        body: body ?? '$plantName is ready for a drink.',
         scheduledDate: tz.TZDateTime.from(remindAt, tz.UTC),
         notificationDetails: details,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
