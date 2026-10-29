@@ -12,6 +12,7 @@ class Plant {
     required this.createdUtc,
     this.lastWateredUtc,
     this.firstDueUtc,
+    this.snoozedUntilUtc,
     List<DateTime>? wateredHistoryUtc,
     this.hasPhoto = false,
     this.hasAvatar = false,
@@ -40,6 +41,12 @@ class Plant {
   /// "just watered = no"). Once the plant is watered for real, the
   /// normal lastWatered + interval rule takes over.
   final DateTime? firstDueUtc;
+
+  /// Snooze: "remind me later", without faking a watering. While
+  /// this is in the future, nextDue() moves to this date instead
+  /// of the normal due date. Watering clears it. Old saves have
+  /// no snooze: they load as null, never as a crash.
+  final DateTime? snoozedUntilUtc;
   final List<DateTime> wateredHistoryUtc;
 
   /// Whether an original photo / pixel avatar is stored for this plant.
@@ -52,6 +59,7 @@ class Plant {
     int? intervalDays,
     DateTime? lastWateredUtc,
     DateTime? firstDueUtc,
+    DateTime? snoozedUntilUtc,
     List<DateTime>? wateredHistoryUtc,
     bool? hasPhoto,
     bool? hasAvatar,
@@ -66,6 +74,7 @@ class Plant {
       createdUtc: createdUtc,
       lastWateredUtc: lastWateredUtc ?? this.lastWateredUtc,
       firstDueUtc: firstDueUtc ?? this.firstDueUtc,
+      snoozedUntilUtc: snoozedUntilUtc ?? this.snoozedUntilUtc,
       wateredHistoryUtc: wateredHistoryUtc ?? this.wateredHistoryUtc,
       hasPhoto: hasPhoto ?? this.hasPhoto,
       hasAvatar: hasAvatar ?? this.hasAvatar,
@@ -75,6 +84,8 @@ class Plant {
   }
 
   /// Same as [copyWith] but able to clear [lastWateredUtc] explicitly.
+  /// Watering always clears a snooze: the plant was watered, so
+  /// "remind me later" no longer applies.
   Plant withLastWatered(DateTime? value, List<DateTime> history) {
     return Plant(
       id: id,
@@ -84,7 +95,29 @@ class Plant {
       createdUtc: createdUtc,
       lastWateredUtc: value,
       firstDueUtc: firstDueUtc,
+      snoozedUntilUtc: null,
       wateredHistoryUtc: history,
+      hasPhoto: hasPhoto,
+      hasAvatar: hasAvatar,
+      careTasks: careTasks,
+      note: note,
+    );
+  }
+
+  /// copyWith cannot clear a nullable field (null means "keep"),
+  /// so cancelling a snooze gets its own method, like
+  /// withLastWatered does for lastWateredUtc.
+  Plant withoutSnooze() {
+    return Plant(
+      id: id,
+      name: name,
+      speciesId: speciesId,
+      intervalDays: intervalDays,
+      createdUtc: createdUtc,
+      lastWateredUtc: lastWateredUtc,
+      firstDueUtc: firstDueUtc,
+      snoozedUntilUtc: null,
+      wateredHistoryUtc: wateredHistoryUtc,
       hasPhoto: hasPhoto,
       hasAvatar: hasAvatar,
       careTasks: careTasks,
@@ -100,6 +133,7 @@ class Plant {
         'createdUtc': createdUtc.toIso8601String(),
         'lastWateredUtc': lastWateredUtc?.toIso8601String(),
         'firstDueUtc': firstDueUtc?.toIso8601String(),
+        'snoozedUntilUtc': snoozedUntilUtc?.toIso8601String(),
         'wateredHistoryUtc': wateredHistoryUtc.map((d) => d.toIso8601String()).toList(),
         'hasPhoto': hasPhoto,
         'hasAvatar': hasAvatar,
@@ -128,6 +162,9 @@ class Plant {
       firstDueUtc: json['firstDueUtc'] == null
           ? null
           : parse(json['firstDueUtc'] as String?, created),
+      snoozedUntilUtc: json['snoozedUntilUtc'] == null
+          ? null
+          : parse(json['snoozedUntilUtc'] as String?, created),
       wateredHistoryUtc: ((json['wateredHistoryUtc'] as List<dynamic>?) ?? [])
           .map((e) => parse(e as String?, created))
           .toList(),

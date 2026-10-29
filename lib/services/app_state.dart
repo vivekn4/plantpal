@@ -175,6 +175,23 @@ class AppState extends ChangeNotifier {
     return ok;
   }
 
+  /// Snooze: remind again in [days] days, without recording a
+  /// watering. History, streak, and interval are untouched — only
+  /// the due date moves, and watering clears the snooze.
+  Future<bool> snoozePlant(String id, int days, DateTime nowUtc) async {
+    final plant = _plants.where((p) => p.id == id).firstOrNull;
+    if (plant == null) return false;
+    return updatePlant(
+      plant.copyWith(snoozedUntilUtc: nowUtc.add(Duration(days: days))),
+    );
+  }
+
+  Future<bool> cancelSnooze(String id) async {
+    final plant = _plants.where((p) => p.id == id).firstOrNull;
+    if (plant == null) return false;
+    return updatePlant(plant.withoutSnooze());
+  }
+
   Future<bool> deletePlant(String id) async {
     final plant = _plants.where((p) => p.id == id).firstOrNull;
     final next = _plants.where((p) => p.id != id).toList();

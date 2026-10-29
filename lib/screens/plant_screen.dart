@@ -200,15 +200,18 @@ class _PlantScreenState extends State<PlantScreen> {
                 ),
                 const SizedBox(height: 16),
                 Center(
-                  child: AvatarPet(
-                    state: widget.state,
-                    plantId: plant.id,
-                    mood: mood,
-                    size: 240,
-                    celebrating: _celebrating,
-                    windy: windSwayApplies(
-                      mood,
-                      widget.state.weather?.windKmh ?? 0,
+                  child: Hero(
+                    tag: 'pet-${plant.id}',
+                    child: AvatarPet(
+                      state: widget.state,
+                      plantId: plant.id,
+                      mood: mood,
+                      size: 240,
+                      celebrating: _celebrating,
+                      windy: windSwayApplies(
+                        mood,
+                        widget.state.weather?.windKmh ?? 0,
+                      ),
                     ),
                   ),
                 ),
@@ -242,6 +245,58 @@ class _PlantScreenState extends State<PlantScreen> {
                   label: 'I watered it',
                   onPressed: _water,
                 ),
+                // Snooze: "not now, remind me later" — without
+                // recording a watering. Only offered when the plant
+                // actually needs attention (due soon or overdue),
+                // or when a snooze is already active (to cancel it).
+                if (isSnoozed(plant, now)) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Snoozed until ${shortDate(plant.snoozedUntilUtc!)}.',
+                    style: const TextStyle(fontSize: 12),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () async {
+                      await widget.state.cancelSnooze(plant.id);
+                    },
+                    child: const Text('Cancel snooze'),
+                  ),
+                ] else if (status != WateringStatus.happy) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Not now?',
+                    style: TextStyle(fontSize: 12),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      TextButton(
+                        onPressed: () async {
+                          await widget.state.snoozePlant(
+                            plant.id,
+                            1,
+                            DateTime.now().toUtc(),
+                          );
+                        },
+                        child: const Text('Remind in 1 day'),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          await widget.state.snoozePlant(
+                            plant.id,
+                            3,
+                            DateTime.now().toUtc(),
+                          );
+                        },
+                        child: const Text('Remind in 3 days'),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Text('Water every $interval days', style: pixelStyle(size: 11)),
                 const SizedBox(height: 8),

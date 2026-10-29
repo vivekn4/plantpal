@@ -16,16 +16,25 @@ class DueBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = statusAt(plant, nowUtc);
-    return Text(
-      dueBadge(plant, nowUtc),
-      style: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.bold,
-        color: status == WateringStatus.overdue
-            ? PlantColors.danger
-            : PlantColors.soil,
+    final badge = dueBadge(plant, nowUtc);
+    // Fade between badge texts when the state changes (watered,
+    // snoozed, interval edited) instead of a hard text swap.
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      transitionBuilder: (child, animation) =>
+          FadeTransition(opacity: animation, child: child),
+      child: Text(
+        badge,
+        key: ValueKey(badge),
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: status == WateringStatus.overdue
+              ? PlantColors.danger
+              : PlantColors.soil,
+        ),
+        textAlign: TextAlign.center,
       ),
-      textAlign: TextAlign.center,
     );
   }
 }

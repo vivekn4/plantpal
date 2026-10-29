@@ -6,6 +6,7 @@ import '../services/app_state.dart';
 import '../services/pet_state_resolver.dart';
 import '../services/watering.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_page_route.dart';
 import '../widgets/avatar_pet.dart';
 import '../widgets/due_badge.dart';
 import '../widgets/pixel_button.dart';
@@ -117,8 +118,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   final navigator = Navigator.of(context);
                   await state.sfx.click();
                   await navigator.push(
-                    MaterialPageRoute(
-                      builder: (_) => SettingsScreen(state: state),
+                    slideFadeRoute(
+                      SettingsScreen(state: state),
                     ),
                   );
                 },
@@ -240,38 +241,52 @@ class _HomeScreenState extends State<HomeScreen> {
                         final status = statusAt(plant, now);
                         final mood = _moodFor(plant.id, status);
                         final needsWater = status != WateringStatus.happy;
-                        return GestureDetector(
-                          onTap: () async {
-                            final navigator = Navigator.of(context);
-                            await state.sfx.click();
-                            await navigator.push(
-                              MaterialPageRoute(
-                                builder: (_) => PlantScreen(
-                                  state: state,
-                                  plantId: plant.id,
+                        return Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () async {
+                              final navigator = Navigator.of(context);
+                              await state.sfx.click();
+                              await navigator.push(
+                                slideFadeRoute(
+                                  PlantScreen(
+                                    state: state,
+                                    plantId: plant.id,
+                                  ),
                                 ),
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.85),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: PlantColors.soilDark,
+                                  width: 2,
+                                ),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color(0x22000000),
+                                    offset: Offset(0, 3),
+                                    blurRadius: 6,
+                                  ),
+                                ],
                               ),
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.7),
-                              border: Border.all(
-                                color: PlantColors.soilDark,
-                                width: 2,
-                              ),
-                            ),
                             child: Column(
                               children: [
-                                AvatarPet(
-                                  state: state,
-                                  plantId: plant.id,
-                                  mood: mood,
-                                  size: 120,
-                                  windy: windSwayApplies(
-                                    mood,
-                                    state.weather?.windKmh ?? 0,
+                                Hero(
+                                  tag: 'pet-${plant.id}',
+                                  child: AvatarPet(
+                                    state: state,
+                                    plantId: plant.id,
+                                    mood: mood,
+                                    size: 120,
+                                    windy: windSwayApplies(
+                                      mood,
+                                      state.weather?.windKmh ?? 0,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -297,7 +312,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               ],
                             ),
                           ),
-                        );
+                        ),
+                      );
                       },
                     ),
                   ],
@@ -320,7 +336,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final navigator = Navigator.of(context);
     await state.sfx.click();
     await navigator.push(
-      MaterialPageRoute(builder: (_) => AdoptScreen(state: state)),
+      slideFadeRoute(AdoptScreen(state: state)),
     );
   }
 }

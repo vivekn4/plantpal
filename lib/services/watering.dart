@@ -14,13 +14,36 @@ enum WateringStatus { happy, dueSoon, overdue }
 /// carries the moisture shift); if even that is missing, fall back to
 /// created + interval rather than crashing.
 DateTime nextDue(Plant plant) {
+  DateTime normalDue;
   final last = plant.lastWateredUtc;
   if (last != null) {
-    return last.add(Duration(days: plant.intervalDays));
+    normalDue = last.add(Duration(days: plant.intervalDays));
+  } else {
+    final first = plant.firstDueUtc;
+    normalDue = first ?? plant.createdUtc.add(Duration(days: plant.intervalDays));
   }
-  final first = plant.firstDueUtc;
-  if (first != null) return first;
-  return plant.createdUtc.add(Duration(days: plant.intervalDays));
+  // Snooze only ever pushes the due date later, never earlier:
+  // snoozing a plant that is not due yet would otherwise drag
+  // its due date forward, which is the opposite of "later".
+  final snoozed = plant.snoozedUntilUtc;
+  if (snoozed != null && snoozed.isAfter(normalDue)) {
+    return snoozed;
+  }
+  return normalDue;
+}
+
+/// True when a snooze is still active at [nowUtc]: the plant's
+/// due date is currently the snoozed date, not the normal one.
+bool isSnoozed(Plant plant, DateTime nowUtc) {
+  final snoozed = plant.snoozedUntilUtc;
+  if (snoozed == null) return false;
+  if (!nowUtc.isBefore(snoozed)) return false;
+  return snoozed.isAfter(
+    plant.lastWateredUtc != null
+        ? plant.lastWateredUtc!.add(Duration(days: plant.intervalDays))
+        : (plant.firstDueUtc ??
+            plant.createdUtc.add(Duration(days: plant.intervalDays))),
+  );
 }
 
 /// First due date at setup time, from the species interval and the

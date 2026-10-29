@@ -118,6 +118,27 @@ everything into one interval, and PlantPal now does the same:
   model, no cloud: that kind of "AI" would need a dataset
   PlantPal does not have, and a wrong guess would be worse than
   no guess.
+- **Snooze.** When a plant is due soon or overdue, the plant
+  screen offers "Remind in 1 day" or "Remind in 3 days". That
+  moves the reminder only — it does not record a watering, so
+  history, streak, and the learned rhythm stay honest.
+  Watering clears a snooze, and a snooze can be cancelled.
+  A snooze never pulls a future due date earlier.
+
+## Look, feel, and motion
+
+- Shelf cards are rounded with a soft shadow and a ripple on
+  tap, instead of flat bordered boxes.
+- Every screen change uses the same short transition: a fade
+  plus a small upward slide (300ms in, 250ms back), instead of
+  the generic Android slide from the right.
+- The pet itself animates between screens: tapping a shelf card
+  grows that pet into the big plant-screen pet (a Hero
+  animation), and back again when you go back.
+- The due badge fades between states (watered, snoozed,
+  interval edited) instead of swapping text in a hard cut.
+  Colour is still never the only signal — the badge text
+  always says the state in plain words.
 
 ## Weather and location
 
