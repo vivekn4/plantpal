@@ -11,7 +11,9 @@ import '../services/learning.dart';
 import '../services/pet_state_resolver.dart';
 import '../services/watering.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_page_route.dart';
 import '../widgets/avatar_pet.dart';
+import 'ar_view_screen.dart';
 import '../widgets/due_badge.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/speech_bubble.dart';
@@ -244,6 +246,23 @@ class _PlantScreenState extends State<PlantScreen> {
                 PixelButton(
                   label: 'I watered it',
                   onPressed: _water,
+                ),
+                const SizedBox(height: 12),
+                PixelButton(
+                  label: 'See in your space',
+                  color: PlantColors.leaf,
+                  onPressed: () async {
+                    final navigator = Navigator.of(context);
+                    await widget.state.sfx.click();
+                    await navigator.push(
+                      slideFadeRoute(
+                        ArViewScreen(
+                          state: widget.state,
+                          plantId: plant.id,
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 // Snooze: "not now, remind me later" — without
                 // recording a watering. Only offered when the plant

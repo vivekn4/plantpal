@@ -102,6 +102,25 @@ int wateringStreak(Plant plant, DateTime nowUtc) {
   return streak;
 }
 
+/// Estimated water level, 0.0 (empty) to 1.0 (just watered), from
+/// the watering schedule alone — NOT a sensor reading. PlantPal
+/// has no soil probe, and this must never be presented as one.
+/// The estimate is simple on purpose: time since the last
+/// watering, divided by the interval. A plant watered halfway
+/// through its interval reads about 0.5; an overdue plant reads
+/// 0.0. A never-watered plant has no level at all (null), not a
+/// made-up number — the AR view says so plainly instead.
+double? estimatedWaterLevel(Plant plant, DateTime nowUtc) {
+  final last = plant.lastWateredUtc;
+  if (last == null) return null;
+  final interval = plant.intervalDays;
+  if (interval <= 0) return null;
+  final elapsedHours = nowUtc.difference(last).inMinutes / 60.0;
+  final totalHours = interval * 24.0;
+  final level = 1.0 - (elapsedHours / totalHours);
+  return level.clamp(0.0, 1.0);
+}
+
 /// Whole days past the due date. Zero when overdue by less than a day.
 int daysOverdue(Plant plant, DateTime nowUtc) {
   final diff = nowUtc.difference(nextDue(plant));
